@@ -7,6 +7,7 @@ library(tidyverse)
 library(tidyr)
 library(ggplot2)
 library(devtools)
+source("utils.R")
 
 #Get lon, lat, and time and cflux values
 cflux_fp = "../data/trace.01-36.22000BP.clm2.cfluxFIRE.22000BP_decavg_400BCE.nc"
@@ -24,7 +25,6 @@ fwi_fp = "../data/TraCE decadal avg. FWI.nc"
 fwi_file <- nc_open(fwi_fp) 
 fwi_vals <- ncvar_get(fwi_file, 'decavg fwi')
 
-
 ### Close nc files
 nc_close(cflux_file) 
 nc_close(burn_file)
@@ -34,15 +34,6 @@ nc_close(fwi_file)
 cflux_array = array(cflux_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
 burn_array = array(burn_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
 fwi_array = array(fwi_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
-
-## Get increments for latitude and longitude
-lat_increments = array(NA, dim = c(length(trace_lat)-1))
-for(i in 1:47){
-  lat_increments[i] = trace_lat[i+1] - trace_lat[i]
-}
-
-lat_incr = max(lat_increments)
-lon_incr = trace_lon[2] - trace_lon[1]
 
 ### Get index for given lat and lon
 '
@@ -61,22 +52,10 @@ lakes_list = list(
   "East Lake" = list(lon = -119.02, lat = 37.17)
 )
 
-lake_name = "Mumbo"
+grid_coords = find_latlon(trace_lat, trace_lon, lat=41.97, lon=-120.2)
 
-lake_lon <- lakes_list[[lake_name]]$lon
-lake_lat <- lakes_list[[lake_name]]$lat
-
-#Convert lon if west of 0 lon
-if(lake_lon < 0){
-  lake_lon = 360 + lake_lon
-}
-
-# Get indices for closest trace grid cell to given lake lat/lon
-lat_ind = which(trace_lat > lake_lat & trace_lat <= (lake_lat+lat_incr))
-if(length(lat_ind)>1){
-  print("GRABBBED TWO LAT INDS: bc lake was too close to grid line")
-}
-lon_ind = which(trace_lon < lake_lon & trace_lon >= (lake_lon-lon_incr))
+lon_ind = grid_coords$lon_index
+lat_ind = grid_coords$lat_index
 
 # Select all cflux values at the selected grid cell
 sel_grid_vals = cflux_array[lon_ind, lat_ind,]

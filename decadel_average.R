@@ -1,67 +1,105 @@
 "
 Get decadel average of annual data
 "
+
 library(ncdf4)
 
-ts_fp = "../data/trace2/TraCE-21K-II.ann.TS.nc"
-ts_file <- nc_open(ts_fp)
+var_name = "CFLUXFIRE"
+var_units = "grams C/m^2 of vegetated area"
+var_longname = "decadal carbon flux to atmosphere due to fire"
+agg_func = sum
 
-trace_lon <- ncvar_get(ts_file, 'lon')
-trace_lat <- ncvar_get(ts_file, 'lat')
-trace_time <- ncvar_get(ts_file, 'time')
+## File paths
+# ts_fp = "../data/trace2/TraCE-21K-II.ann.TS.nc" #Just for decade time indices
+var_fp = paste0("../data/trace2/TraCE-21K-II.hv.", var_name, ".nc")
+
+## Open files
+# ts_file <- nc_open(ts_fp)
+var_file <- nc_open(var_fp)
+
+## Get indices from ts file and define pft
+trace_lon <- ncvar_get(var_file, 'lon')
+trace_lat <- ncvar_get(var_file, 'lat')
+trace_ann_time <- ncvar_get(var_file, 'time')
+dec_inds <- seq(1, length(trace_ann_time), by = 10)
+trace_dec_time <- trace_ann_time[dec_inds]
 trace_pft <- seq(1, 10)
 
-### NPP data
-var_fp = "../data/trace2/TraCE-21K-II.hv.BURN.nc"
-var_file <- nc_open(var_fp) # Read in TraCE netCDF file
+# trace_dec_time_test <- ncvar_get(ts_file, 'time')
 
-var_vals <- ncvar_get(var_file, 'BURN')
-nc_close(var_file) # Close nc file
+## Get dimensions of new variable
+var_dims <- sapply(var_file$var[[var_name]]$dim, function(x) x$len)
+num_dims = length(var_dims)
 
-var_dims = dim(var_vals)
-### For 4d variables
-# decavg_var_vals = array(NA, dim = c(var_dims[1], var_dims[2], var_dims[3], var_dims[4]/10))
-# 
-# for(x in (1:var_dims[1])){
-#   for(y in (1:var_dims[2])){
-#     for(i in (1:var_dims[3])){
-#       for(t in (1:var_dims[4]/10)){
-#         sum_vals = 0
-#         for(t_inc in (0:9)){
-#           sum_vals = sum_vals + var_vals[x, y, i, t+t_inc]
-#         }
-#         decavg_var_vals[x, y, i, t] = sum_vals / 10
-#       }
-#     }
-#   }
-# }
+## Define our dimensions
+lon <- ncdim_def("lon","degrees_east",trace_lon)
+lat <- ncdim_def("lat","degrees_north",trace_lat)
+time <- ncdim_def("time","decade",trace_dec_time)
+type <- ncdim_def("pft","type",trace_pft)
 
-## For 3d variables
-decavg_var_vals = array(NA, dim = c(var_dims[1], var_dims[2], var_dims[3]/10))
+# Define variable and time length
+time_length = NULL
+if(num_dims==3){
+  TraCE_devavg_var <- ncvar_def(var_name,var_units,list(lon,lat,time),longname=var_longname)
+  time_length = var_dims[3]
+} else if(num_dims==4){
+  TraCE_devavg_var <- ncvar_def(var_name,var_units,list(lon,lat,type,time),longname=var_longname)
+  time_length = var_dims[4]
+}
 
-for(x in (1:var_dims[1])){
-  for(y in (1:var_dims[2])){
-    for(t in (1:var_dims[3]/10)){
-      sum_vals = 0
-      for(t_inc in (0:9)){
-        sum_vals = sum_vals + var_vals[x, y, t+t_inc]
-      }
-      decavg_var_vals[x, y, t] = sum_vals / 10
+## Create new nc file
+outfile_fp = paste0("../data/trace2/TraCE-21K-II.decavg.", var_name, ".nc")
+out_file <- nc_create(outfile_fp, list(TraCE_devavg_var))
+
+chunk_size = 1000
+for (t in seq(1, time_length, by = chunk_size)) {
+  if((t-1)%%1000 == 0){
+    if(t==1){
+      cat("Beginning processing at time index: 1\n")
+    }
+    else{
+      cat("Processing ka starting at time index:", t, "\n")
+    }
+  }
+  if((t+chunk_size-1)>time_length){
+    chunk_size = (time_length-t+1)
+  }
+  
+  ## Get 100 years of data at a time
+  chunk_vals = NULL
+  if(num_dims==3){
+    chunk_vals <- ncvar_get(var_file, var_name, start = c(1, 1, t),
+                            count = c(var_dims[1], var_dims[2], chunk_size))
+  }else if(num_dims==4){
+    chunk_vals <- ncvar_get(var_file, var_name, start = c(1, 1, 1, t),
+                            count = c(var_dims[1], var_dims[2], var_dims[3], chunk_size))
+  }
+  
+  for(decade in (1:(chunk_size/10))){
+    start_ind = 1 + ((decade-1)*10)
+    end_ind = start_ind+9
+    if(num_dims==3){ # in the case we have only 3d variable
+      decade_vals <- chunk_vals[,,start_ind:end_ind]
+      ## Calculate decade average
+      decavg_vals <- apply(decade_vals, c(1, 2), mean)
+      
+      ## Store decadel average
+      ncvar_put(out_file, TraCE_devavg_var, decavg_vals, start = c(1, 1, (t - 1) / 10 + decade), 
+                count = c(var_dims[1], var_dims[2], 1))
+    }else if(num_dims==4){ #in the case we have 4d variable
+      decade_vals <- chunk_vals[,,,start_ind:end_ind]
+      ## Calculate decade average
+      decavg_vals <- apply(decade_vals, c(1, 2, 3), mean)
+      
+      ## Store decadal average
+      ncvar_put(out_file, TraCE_devavg_var, decavg_vals, start = c(1, 1, 1, (t - 1) / 10 + decade), 
+                count = c(var_dims[1], var_dims[2], var_dims[3], 1))
     }
   }
 }
+nc_close(out_file)
+nc_close(var_file)
 
-var_vals = NULL
-### Create new netcdf file for decavg npp
-
-lon <- ncdim_def("lon","degrees_east",trace_lon)
-lat <- ncdim_def("lat","degrees_north",trace_lat)
-time <- ncdim_def("time","decade",trace_time)
-pft <- ncdim_def("pft","type",trace_pft)
-
-### Add pft or fourth dimensions for 4d variables
-TraCE.devavg_var<-ncvar_def("decavg BURN","fraction",list(lon,lat,time),longname="fraction of vegetated area burned")
-
-name.hold <- nc_create('~/Desktop/ecsc_500/data/TraCE-II.decavg.BURN.nc',list(TraCE.devavg_var))
-
-ncvar_put(name.hold,TraCE.devavg_var, decavg_var_vals)
+end_time = Sys.time()
+runtime = end_time - start_time
+cat("Runtime: ", runtime, "minutes\n")
