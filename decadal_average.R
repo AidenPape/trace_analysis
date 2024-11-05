@@ -1,13 +1,26 @@
 "
 Get decadel average of annual data
+
+This code works for 3-d (lon, lat, time) or 4-d (lon, lat, type, time) data, for
+example NPP or PFT that have 10 types of pft for each lon, lat, time point.
+
+You must specify the name of your 4 fourth dimension if you variable has 4 dimensions
+
+This code reads data from ncdf file 1000 years at a time, this can be changed but
+must be a multiple of 10
 "
 
 library(ncdf4)
 
-var_name = "CFLUXFIRE"
-var_units = "grams C/m^2 of vegetated area"
-var_longname = "decadal carbon flux to atmosphere due to fire"
-agg_func = sum
+## Parameters
+var_name = "NPP"
+var_units = ""
+var_longname = "decadal average fraction of area burned"
+agg_func = mean
+chunksize = 1000
+
+## Additional paremeter for 4-D data
+type_name = "" ## ie "pft"
 
 ## File paths
 # ts_fp = "../data/trace2/TraCE-21K-II.ann.TS.nc" #Just for decade time indices
@@ -23,19 +36,17 @@ trace_lat <- ncvar_get(var_file, 'lat')
 trace_ann_time <- ncvar_get(var_file, 'time')
 dec_inds <- seq(1, length(trace_ann_time), by = 10)
 trace_dec_time <- trace_ann_time[dec_inds]
-trace_pft <- seq(1, 10)
-
-# trace_dec_time_test <- ncvar_get(ts_file, 'time')
 
 ## Get dimensions of new variable
 var_dims <- sapply(var_file$var[[var_name]]$dim, function(x) x$len)
 num_dims = length(var_dims)
+trace_type <- seq(1, var_dims[3]) ## This only makes sense for 4-d, ignore for 3-d
 
 ## Define our dimensions
 lon <- ncdim_def("lon","degrees_east",trace_lon)
 lat <- ncdim_def("lat","degrees_north",trace_lat)
 time <- ncdim_def("time","decade",trace_dec_time)
-type <- ncdim_def("pft","type",trace_pft)
+type <- ncdim_def(type_name,"type",trace_type)
 
 # Define variable and time length
 time_length = NULL
@@ -51,7 +62,7 @@ if(num_dims==3){
 outfile_fp = paste0("../data/trace2/TraCE-21K-II.decavg.", var_name, ".nc")
 out_file <- nc_create(outfile_fp, list(TraCE_devavg_var))
 
-chunk_size = 1000
+start_time = Sys.time()
 for (t in seq(1, time_length, by = chunk_size)) {
   if((t-1)%%1000 == 0){
     if(t==1){
@@ -65,7 +76,7 @@ for (t in seq(1, time_length, by = chunk_size)) {
     chunk_size = (time_length-t+1)
   }
   
-  ## Get 100 years of data at a time
+  ## Get chunksize years of data at a time
   chunk_vals = NULL
   if(num_dims==3){
     chunk_vals <- ncvar_get(var_file, var_name, start = c(1, 1, t),
