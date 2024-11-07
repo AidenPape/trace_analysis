@@ -40,7 +40,7 @@ trace_dec_time <- trace_ann_time[dec_inds]
 ## Get dimensions of new variable
 var_dims <- sapply(var_file$var[[var_name]]$dim, function(x) x$len)
 num_dims = length(var_dims)
-trace_type <- seq(1, var_dims[3]) ## This only makes sense for 4-d, ignore for 3-d
+trace_type = ncvar_get(var_file, type_name) ## This only makes sense for 4-d, ignore for 3-d
 
 ## Define our dimensions
 lon <- ncdim_def("lon","degrees_east",trace_lon)
