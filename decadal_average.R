@@ -12,7 +12,7 @@ must be a multiple of 10
 
 library(ncdf4)
 
-## Parameters
+### PARAMETERS ###
 var_name = "NPP"
 var_units = ""
 var_longname = "decadal average fraction of area burned"
@@ -21,6 +21,8 @@ chunksize = 1000
 
 ## Additional paremeter for 4-D data
 type_name = "" ## ie "pft"
+
+### FUNCTION ###
 
 ## File paths
 # ts_fp = "../data/trace2/TraCE-21K-II.ann.TS.nc" #Just for decade time indices
@@ -62,6 +64,7 @@ if(num_dims==3){
 outfile_fp = paste0("../data/trace2/TraCE-21K-II.decavg.", var_name, ".nc")
 out_file <- nc_create(outfile_fp, list(TraCE_devavg_var))
 
+## Begin looping through data time chunk by time chunk
 start_time = Sys.time()
 for (t in seq(1, time_length, by = chunk_size)) {
   if((t-1)%%1000 == 0){
@@ -72,11 +75,13 @@ for (t in seq(1, time_length, by = chunk_size)) {
       cat("Processing ka starting at time index:", t, "\n")
     }
   }
+  
+  ## If there is less than chunksize data left
   if((t+chunk_size-1)>time_length){
     chunk_size = (time_length-t+1)
   }
   
-  ## Get chunksize years of data at a time
+  ## Get chunk size years of data at a time
   chunk_vals = NULL
   if(num_dims==3){
     chunk_vals <- ncvar_get(var_file, var_name, start = c(1, 1, t),
@@ -86,23 +91,25 @@ for (t in seq(1, time_length, by = chunk_size)) {
                             count = c(var_dims[1], var_dims[2], var_dims[3], chunk_size))
   }
   
+  ## For each chunksize, go through decade by decade and average, then store values
   for(decade in (1:(chunk_size/10))){
+    
+    ## Define starting and ending index
     start_ind = 1 + ((decade-1)*10)
     end_ind = start_ind+9
+    
+    ## Get 10 values, average them, and store the result
     if(num_dims==3){ # in the case we have only 3d variable
-      decade_vals <- chunk_vals[,,start_ind:end_ind]
-      ## Calculate decade average
-      decavg_vals <- apply(decade_vals, c(1, 2), mean)
       
-      ## Store decadel average
+      decade_vals <- chunk_vals[,,start_ind:end_ind] ## slicing for each decade
+      decavg_vals <- apply(decade_vals, c(1, 2), mean) ## averaging
       ncvar_put(out_file, TraCE_devavg_var, decavg_vals, start = c(1, 1, (t - 1) / 10 + decade), 
                 count = c(var_dims[1], var_dims[2], 1))
-    }else if(num_dims==4){ #in the case we have 4d variable
-      decade_vals <- chunk_vals[,,,start_ind:end_ind]
-      ## Calculate decade average
-      decavg_vals <- apply(decade_vals, c(1, 2, 3), mean)
       
-      ## Store decadal average
+    }else if(num_dims==4){ #in the case we have 4d variable
+      
+      decade_vals <- chunk_vals[,,,start_ind:end_ind] ## slicing for each decade
+      decavg_vals <- apply(decade_vals, c(1, 2, 3), mean) ## averaging
       ncvar_put(out_file, TraCE_devavg_var, decavg_vals, start = c(1, 1, 1, (t - 1) / 10 + decade), 
                 count = c(var_dims[1], var_dims[2], var_dims[3], 1))
     }
