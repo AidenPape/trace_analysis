@@ -20,12 +20,12 @@ find_latlon <- function(trace_lats, trace_lons, lat, lon){
   }
   
   # Get indices for closest trace grid cell to given lake lat/lon
-  lat_ind = which(trace_lat > lat & trace_lat <= (lat+lat_incr))
+  lat_ind = which(trace_lat > (lat-lat_incr/2) & trace_lat <= (lat+lat_incr/2))
   
   if(length(lat_ind)>1){
-    print("GRABBBED TWO LAT INDS: bc point was too close to grid line")
+    print("GRABBBED TWO LAT INDS: bc point was right in between two grids")
   }
-  lon_ind = which(trace_lon < lon & trace_lon >= (lon-lon_incr))
+  lon_ind = which(trace_lon > (lon-lon_incr/2) & trace_lon <= (lon+lon_incr/2))
   
   grid_lon = trace_lons[lon_ind]
   grid_lat = trace_lats[lat_ind]

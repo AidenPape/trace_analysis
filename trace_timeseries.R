@@ -10,18 +10,18 @@ library(devtools)
 source("utils.R")
 
 #Get lon, lat, and time and cflux values
-cflux_fp = "../data/trace.01-36.22000BP.clm2.cfluxFIRE.22000BP_decavg_400BCE.nc"
+cflux_fp = "../data/trace2/TraCE-21K-II.decavg.CFLUXFIRE.nc"
 cflux_file <- nc_open(cflux_fp) 
 trace_lon <- ncvar_get(cflux_file, 'lon'); trace_lat <- ncvar_get(cflux_file, 'lat'); trace_time <- ncvar_get(cflux_file, 'time')
 cflux_vals <- ncvar_get(cflux_file, 'CFLUXFIRE')
 
 ### Get burn data
-burn_fp = "../data/trace.01-36.22000BP.clm2.BURN.22000BP_decavg_400BCE.nc"
+burn_fp = "../data/trace2/TraCE-21K-II.decavg.BURN.nc"
 burn_file <- nc_open(burn_fp)
 burn_vals <- ncvar_get(burn_file, 'BURN')
 
 ### Get fwi data
-fwi_fp = "../data/TraCE decadal avg. FWI.nc"
+fwi_fp = "../data/trace1/TraCE decadal avg. FWI.nc"
 fwi_file <- nc_open(fwi_fp) 
 fwi_vals <- ncvar_get(fwi_file, 'decavg fwi')
 
@@ -52,7 +52,11 @@ lakes_list = list(
   "East Lake" = list(lon = -119.02, lat = 37.17)
 )
 
-grid_coords = find_latlon(trace_lat, trace_lon, lat=41.97, lon=-120.2)
+lake_name = "Lily Lake"
+lake_lat = lakes_list[[lake_name]]$lat
+lake_lon = lakes_list[[lake_name]]$lon
+
+grid_coords = find_latlon(trace_lat, trace_lon, lat=lake_lat, lon=lake_lon)
 
 lon_ind = grid_coords$lon_index
 lat_ind = grid_coords$lat_index
@@ -76,10 +80,10 @@ sel_time = sel_time[-length(sel_time)]
 # Plot time series
 ggplot() + 
   geom_line(aes(x=sel_time,y=sel_grid_vals), color = 'red', linewidth = 0.5) + 
-  geom_smooth(aes(x=sel_time,y=sel_grid_vals), method = "loess") +
+  # geom_smooth(aes(x=sel_time,y=sel_grid_vals), method = "loess") +
   theme(legend.position = 'none', legend.text = element_text(size = 5),
         legend.title = element_blank(), legend.key.size = unit(0.5,'cm'),
-        panel.grid.major = element_line(size = 0.25, linetype = 'solid', colour = "gray"),
+        panel.grid.major = element_line(linewidth = 0.25, linetype = 'solid', colour = "gray"),
         panel.background = element_rect(fill = "white",colour = "black",
                                         size = 1, linetype = "solid")) +
   scale_x_continuous(breaks = seq(-22,0,1)

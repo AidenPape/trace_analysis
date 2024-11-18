@@ -9,18 +9,18 @@ You must specify the name of your 4 fourth dimension if you variable has 4 dimen
 This code reads data from ncdf file 1000 years at a time, this can be changed but
 must be a multiple of 10
 "
-
 library(ncdf4)
 
 ### PARAMETERS ###
-var_name = "NPP"
-var_units = ""
-var_longname = "decadal average fraction of area burned"
+var_name = "FPCGRID"
+var_units = "fraction of vegetated area"
+var_longname = "decadal average plant functional type cover"
 agg_func = mean
-chunksize = 1000
+chunk_size = 1000
 
 ## Additional paremeter for 4-D data
-type_name = "" ## ie "pft"
+type_name = "pft" ## ie "pft"
+trace_type = seq(1:10) 
 
 ### FUNCTION ###
 
@@ -41,8 +41,7 @@ trace_dec_time <- trace_ann_time[dec_inds]
 
 ## Get dimensions of new variable
 var_dims <- sapply(var_file$var[[var_name]]$dim, function(x) x$len)
-num_dims = length(var_dims)
-trace_type = ncvar_get(var_file, type_name) ## This only makes sense for 4-d, ignore for 3-d
+num_dims = length(var_dims) ## This only makes sense for 4-d, ignore for 3-d
 
 ## Define our dimensions
 lon <- ncdim_def("lon","degrees_east",trace_lon)

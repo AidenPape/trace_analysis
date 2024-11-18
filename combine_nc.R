@@ -17,7 +17,8 @@ data_dir = "~/Desktop/ecsc_500/data/trace2/"
 files = list(
   list(var_name = "BURN", fp = "TraCE-21K-II.decavg.BURN.nc"),
   list(var_name = "CFLUXFIRE", fp = "TraCE-21K-II.decavg.CFLUXFIRE.nc"),
-  list(var_name = "NPP", fp = "TraCE-21K-II.decavg.NPP.nc")
+  list(var_name = "NPP", fp = "TraCE-21K-II.decavg.NPP.nc"),
+  list(var_name = "FPCGRID", fp = "TraCE-21K-II.decavg.FPCGRID.nc")
 )
 
 ### FUNCTION ###

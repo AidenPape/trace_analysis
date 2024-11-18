@@ -8,25 +8,20 @@ library(cffdrs)
 library(tidyverse)
 library(tidyr)
 library(maps)
+source("utils.R")
 
 ##### cFlux Data #####
 
 ## Open netCDF file with cflux data
-# cflux_fp = "../data/trace1/trace.01-36.22000BP.clm2.cfluxFIRE.22000BP_decavg_400BCE.nc"
 cflux_fp = "../data/trace2/TraCE-21K-II.hv.CFLUXFIRE.nc"
 cflux_file <- nc_open(cflux_fp) # Read in TraCE .netCDF file
 
 ## Get lon, lat, and time and cflux values
-trace_lon <- ncvar_get(cflux_file, 'lon'); trace_lat <- ncvar_get(cflux_file, 'lat'); trace_time <- ncvar_get(cflux_file, 'time')
-# Get center of grid lat/lon for geom_tile
-trace_lon_center = trace_lon + (3.75/2)
-lat_increments = array(NA, dim = c(length(trace_lat)))
-lat_increments[1] = trace_lat[1] + 90
-for(i in 2:48){
-  lat_increments[i] = trace_lat[i] - trace_lat[i-1]
-}
-trace_lat_center = trace_lat - (lat_increments/2)
-cflux_vals <- ncvar_get(cflux_file, 'CFLUXFIRE') #values
+trace_lon <- ncvar_get(cflux_file, 'lon'); trace_lat <- ncvar_get(cflux_file, 'lat')
+trace_time <- ncvar_get(cflux_file, 'time')
+
+## Get values and close file
+cflux_vals <- ncvar_get(cflux_file, 'CFLUXFIRE') 
 nc_close(cflux_file) 
 
 ## Create 3-d array 
@@ -44,17 +39,23 @@ time_step_ind = which(trace_time == time_step)
 cflux_dt_fil = cflux_dt[time == time_step]
 cflux_dt_fil$time = NULL
 
+cflux_dt_fil$lon <- ifelse(cflux_dt_fil$lon > 180, cflux_dt_fil$lon - 360, cflux_dt_fil$lon)
+
 ## Reformat dataframe at specific time step into matrix for filled.contour
-cflux_matrix <- cflux_dt_fil |>
-  pivot_wider(names_from = lat, values_from = cflux)
-
-cflux_matrix <- as.data.frame(cflux_matrix)
-rownames(cflux_matrix) <- cflux_matrix$lon
-cflux_matrix$lon = NULL
-
-cflux_matrix = as.matrix(cflux_matrix)
+# cflux_matrix <- cflux_dt_fil |>
+#   pivot_wider(names_from = lat, values_from = cflux)
+# 
+# cflux_matrix <- as.data.frame(cflux_matrix)
+# rownames(cflux_matrix) <- cflux_matrix$lon
+# cflux_matrix$lon = NULL
+# 
+# cflux_matrix = as.matrix(cflux_matrix)
 
 ###### MAKE PLOTS OF cflux AT SPECIFIC TIME ######
+
+lake_lon = -122.87
+lake_lat = 37.96
+lake_coords = find_latlon(trace_lat, trace_lon, lake_lat, lake_lon)
 
 ## Set up mapping parameters ##
 # World2Hires = maps::map("world2Hires",plot=F) ## This is not working
@@ -64,35 +65,48 @@ palette1 <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 9, name = "Spectra
 
 ## Make some maps using filled.contour function ##
 # NA lims ## xlim=c(230,295),ylim=c(25,50),
-filled.contour(x=trace_lon, y=trace_lat, z=cflux_array[,,time_step_ind], xlim=c(230,295),ylim=c(25,50), color.palette = palette1,
+cflux_timestep = cflux_array[,,time_step_ind]
+cflux_timestep[cflux_timestep>100] = 100
+cflux_timestep[is.na(cflux_timestep)] = 0
+
+filled.contour(x=trace_lon, y=trace_lat, z=cflux_timestep, xlim=c(230,250),ylim=c(30,45), color.palette = palette1,
                levels = seq(0,100,5), xlab="Longitude",ylab="Latitude",
                main=paste("cflux at 22 ka"),
                plot.axes={
-                 map.axes(las=1); map(stat.proj,lwd=1,add=T,col="black",lty=1)
+                 map.axes(las=1)
+                 map(stat.proj,lwd=1,add=T,col="black",lty=1)
+                 rect(
+                   xleft = lake_coords$gridcell_lon - 3.75 / 2, xright = lake_coords$gridcell_lon + 3.75 / 2, 
+                   ybottom = lake_coords$gridcell_lat - 3.75 / 2, ytop = lake_coords$gridcell_lat + 3.75 / 2, 
+                   border = "blue", lwd = 2 # Set thickness
+                 )
+                 points(
+                   x = lake_lon+360, y = lake_lat, col = "red", pch = 16, cex = 1
+                 )
                }
                )
 
 ### Add point with highlighted grid cell for grid cell plot
-lake_lon = -122.87+360
-lake_lat = 37.96
+state_map <- map_data("state")
 
 ## Grid cell plots (non-interpolated)
 ggplot() +
   geom_tile(data = cflux_dt_fil, aes(x=lon, y=lat, fill=cflux)) +
-  scale_x_continuous(limits = c(230, 290)) +
-  scale_y_continuous(limits = c(25, 50)) +
-  scale_fill_gradient2(low = "#075AFF",
-                       mid = "#075AFF",
-                       high = "#FF0000") +
+  scale_x_continuous(limits = c(-130, -110)) +
+  scale_y_continuous(limits = c(20, 50)) +
+  scale_fill_gradient2(low = "#075AFF", mid = "#075AFF", high = "#FF0000") +
   labs(x = "Longitude", y = "Latitude", fill = "cflux") +
   theme_minimal() +
-  geom_point(aes(x = lake_lon, y = lake_lat))
-
+  geom_tile(
+    data = data.frame(lon = lake_coords$gridcell_lon-360, lat = lake_coords$gridcell_lat),
+    aes(x = lon, y = lat), width = 3.75, height = 3.75, fill = NA, color = "black", size = 1
+  ) +
+  geom_point(aes(x = lake_lon, y = lake_lat)) +
+  geom_path(data = state_map, aes(x = long, y = lat, group = group), color = "black", inherit.aes = FALSE)
 
 ########## BURN DATA #########
 
 ## Open netCDF file with burn data
-# burn_fp = "../data/trace1/trace.01-36.22000BP.clm2.BURN.22000BP_decavg_400BCE.nc"
 burn_fp = "../data/trace2/TraCE-21K-II.hv.BURN.nc"
 burn_file <- nc_open(burn_fp) # Read in TraCE netCDF file
 
