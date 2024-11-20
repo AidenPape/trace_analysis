@@ -101,14 +101,14 @@ for (t in seq(1, time_length, by = chunk_size)) {
     if(num_dims==3){ # in the case we have only 3d variable
       
       decade_vals <- chunk_vals[,,start_ind:end_ind] ## slicing for each decade
-      decavg_vals <- apply(decade_vals, c(1, 2), mean) ## averaging
+      decavg_vals <- apply(decade_vals, c(1, 2), agg_func) ## averaging
       ncvar_put(out_file, TraCE_devavg_var, decavg_vals, start = c(1, 1, (t - 1) / 10 + decade), 
                 count = c(var_dims[1], var_dims[2], 1))
       
     }else if(num_dims==4){ #in the case we have 4d variable
       
       decade_vals <- chunk_vals[,,,start_ind:end_ind] ## slicing for each decade
-      decavg_vals <- apply(decade_vals, c(1, 2, 3), mean) ## averaging
+      decavg_vals <- apply(decade_vals, c(1, 2, 3), agg_func) ## averaging
       ncvar_put(out_file, TraCE_devavg_var, decavg_vals, start = c(1, 1, 1, (t - 1) / 10 + decade), 
                 count = c(var_dims[1], var_dims[2], var_dims[3], 1))
     }
