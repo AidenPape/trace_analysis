@@ -1,7 +1,8 @@
 '
-Read in cflux data and create some plots
+Read in trace_var data and create some plots
 '
 
+library(RColorBrewer)
 library(ncdf4)
 library(data.table)
 library(cffdrs)
@@ -10,52 +11,63 @@ library(tidyr)
 library(maps)
 source("utils.R")
 
-##### cFlux Data #####
+##### Read Lake Coords #####
+lakes_fp = "../data/Paleofire Database.csv"
+lakes_data = read.csv(lakes_fp)
+lakes_data = lakes_data[c("Loc.Name", "Lon", "Lat")]
 
-## Open netCDF file with cflux data
-cflux_fp = "../data/trace2/TraCE-21K-II.hv.CFLUXFIRE.nc"
-cflux_file <- nc_open(cflux_fp) # Read in TraCE .netCDF file
-
-## Get lon, lat, and time and cflux values
-trace_lon <- ncvar_get(cflux_file, 'lon'); trace_lat <- ncvar_get(cflux_file, 'lat')
-trace_time <- ncvar_get(cflux_file, 'time')
+##### Trace Variable Data #####
+## Open netCDF file with trace_var data
+trace_var_fp = "../data/trace2/TraCE-21K-II.ann.TS.nc"
+trace_var_file <- nc_open(trace_var_fp) # Read in TraCE .netCDF file
 
 ## Get values and close file
-cflux_vals <- ncvar_get(cflux_file, 'CFLUXFIRE') 
-nc_close(cflux_file) 
+trace_var_vals <- ncvar_get(trace_var_file, 'TS') 
+
+## Get lon, lat, and time and trace_var values
+trace_lon <- ncvar_get(trace_var_file, 'lon')
+trace_lat <- ncvar_get(trace_var_file, 'lat')
+trace_time <- ncvar_get(trace_var_file, 'time')
+
+nc_close(trace_var_file) 
 
 ## Create 3-d array 
-cflux_array = array(cflux_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
-# dimnames(cflux_array) <- list(lon = trace_lon, lat = trace_lat, time = trace_time)
+trace_var_array = array(trace_var_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
+# dimnames(trace_var_array) <- list(lon = trace_lon, lat = trace_lat, time = trace_time)
 
 ## Create data.table
 grid = expand.grid(lon = trace_lon, lat = trace_lat, time = trace_time) #All combos of these
-cflux_vals_flat = as.vector(cflux_vals) # Add cflux
-cflux_dt = data.table(grid, cflux = cflux_vals_flat) #Create dt
+trace_var_vals_flat = as.vector(trace_var_vals) # Add trace_var
+trace_var_dt = data.table(grid, trace_var = trace_var_vals_flat) #Create dt
 
 ## Filter for specific time step from data.table
 time_step = -22.00
 time_step_ind = which(trace_time == time_step)
-cflux_dt_fil = cflux_dt[time == time_step]
-cflux_dt_fil$time = NULL
+trace_var_dt_fil = trace_var_dt[time == time_step]
+trace_var_dt_fil$time = NULL
 
-cflux_dt_fil$lon <- ifelse(cflux_dt_fil$lon > 180, cflux_dt_fil$lon - 360, cflux_dt_fil$lon)
+trace_var_dt_fil$lon <- ifelse(trace_var_dt_fil$lon > 180, trace_var_dt_fil$lon - 360, trace_var_dt_fil$lon)
 
 ## Reformat dataframe at specific time step into matrix for filled.contour
-# cflux_matrix <- cflux_dt_fil |>
-#   pivot_wider(names_from = lat, values_from = cflux)
+# trace_var_matrix <- trace_var_dt_fil |>
+#   pivot_wider(names_from = lat, values_from = trace_var)
 # 
-# cflux_matrix <- as.data.frame(cflux_matrix)
-# rownames(cflux_matrix) <- cflux_matrix$lon
-# cflux_matrix$lon = NULL
+# trace_var_matrix <- as.data.frame(trace_var_matrix)
+# rownames(trace_var_matrix) <- trace_var_matrix$lon
+# trace_var_matrix$lon = NULL
 # 
-# cflux_matrix = as.matrix(cflux_matrix)
+# trace_var_matrix = as.matrix(trace_var_matrix)
 
-###### MAKE PLOTS OF cflux AT SPECIFIC TIME ######
+###### MAKE PLOTS OF trace_var AT SPECIFIC TIME ######
 
-lake_lon = -122.87
-lake_lat = 37.96
-lake_coords = find_latlon(trace_lat, trace_lon, lake_lat, lake_lon)
+lake_name = "Crater Lake"
+lake_lat = lakes_data[lakes_data$Loc.Name==lake_name,]$Lat
+lake_lon = lakes_data[lakes_data$Loc.Name==lake_name,]$Lon
+
+grid_coords = find_latlon(trace_lat, trace_lon, lat=lake_lat, lon=lake_lon)
+
+all_lake_lons = lakes_data$Lon
+all_lake_lats = lakes_data$Lat
 
 ## Set up mapping parameters ##
 # World2Hires = maps::map("world2Hires",plot=F) ## This is not working
@@ -65,105 +77,60 @@ palette1 <- colorRampPalette(rev(RColorBrewer::brewer.pal(n = 9, name = "Spectra
 
 ## Make some maps using filled.contour function ##
 # NA lims ## xlim=c(230,295),ylim=c(25,50),
-cflux_timestep = cflux_array[,,time_step_ind]
-cflux_timestep[cflux_timestep>100] = 100
-cflux_timestep[is.na(cflux_timestep)] = 0
+trace_var_timestep = trace_var_array[,,time_step_ind]
 
-filled.contour(x=trace_lon, y=trace_lat, z=cflux_timestep, xlim=c(230,250),ylim=c(30,45), color.palette = palette1,
-               levels = seq(0,100,5), xlab="Longitude",ylab="Latitude",
-               main=paste("cflux at 22 ka"),
+### For visual scaling purposes, adjust extrema
+# trace_var_timestep[trace_var_timestep<220] = 220
+# trace_var_timestep[trace_var_timestep>290] = 290
+# trace_var_timestep[is.na(trace_var_timestep)] = 0
+
+### For global data, change trace_lon to adjusted_lon
+### Change back to trace_lon for CONUS zoomed (colors/map will not show if wrong lons used)
+adjusted_lon <- ifelse(trace_lon > 180, trace_lon - 360, trace_lon)
+sorted_indices <- order(adjusted_lon)
+adjusted_lon <- adjusted_lon[sorted_indices]
+trace_var_timestep <- trace_var_timestep[sorted_indices, ]
+
+filled.contour(x=trace_lon, y=trace_lat, z=trace_var_timestep, color.palette = palette1,
+               xlim=c(233,248), ylim=c(31,45),  ## Comment out for global
+               levels = seq(200,305,5), xlab="Longitude",ylab="Latitude",
+               main=paste("Temp (K) at 22 ka"),
                plot.axes={
                  map.axes(las=1)
-                 map(stat.proj,lwd=1,add=T,col="black",lty=1)
+                 # map("world", add = TRUE, col = "black", lwd = 1) ## Country outlines
+                 map(stat.proj,lwd=1,add=T,col="black",lty=1) ## State outlines
                  rect(
-                   xleft = lake_coords$gridcell_lon - 3.75 / 2, xright = lake_coords$gridcell_lon + 3.75 / 2, 
-                   ybottom = lake_coords$gridcell_lat - 3.75 / 2, ytop = lake_coords$gridcell_lat + 3.75 / 2, 
+                   xleft = grid_coords$gridcell_lon - 3.75 / 2, xright = grid_coords$gridcell_lon + 3.75 / 2,
+                   ybottom = grid_coords$gridcell_lat - 3.75 / 2, ytop = grid_coords$gridcell_lat + 3.75 / 2,
                    border = "blue", lwd = 2 # Set thickness
                  )
                  points(
-                   x = lake_lon+360, y = lake_lat, col = "red", pch = 16, cex = 1
+                   x = all_lake_lons+360, y = all_lake_lats, col = "red", pch = 16, cex = 1
                  )
                }
                )
 
 ### Add point with highlighted grid cell for grid cell plot
 state_map <- map_data("state")
+world_map <- map_data("world")
 
-## Grid cell plots (non-interpolated)
+## Grid cell plots (non-interpolated) 
+## Command scales in and geom_path(state_map) in for CONUS
 ggplot() +
-  geom_tile(data = cflux_dt_fil, aes(x=lon, y=lat, fill=cflux)) +
-  scale_x_continuous(limits = c(-130, -110)) +
-  scale_y_continuous(limits = c(20, 50)) +
-  scale_fill_gradient2(low = "#075AFF", mid = "#075AFF", high = "#FF0000") +
-  labs(x = "Longitude", y = "Latitude", fill = "cflux") +
+  geom_tile(data = trace_var_dt_fil, aes(x=lon, y=lat, fill=trace_var)) +
+  # scale_x_continuous(limits = c(-130, -110)) + ## For CONUS
+  # scale_y_continuous(limits = c(20, 50)) + ## For CONUS
+  scale_fill_distiller(palette="Spectral", direction=-1, limits = c(200, 300), oob = scales::squish) +
+  labs(title = "Temperature (K) at 22 ka", x = "Longitude", y = "Latitude", fill = "Temp (K)") +
   theme_minimal() +
   geom_tile(
-    data = data.frame(lon = lake_coords$gridcell_lon-360, lat = lake_coords$gridcell_lat),
-    aes(x = lon, y = lat), width = 3.75, height = 3.75, fill = NA, color = "black", size = 1
+    data = data.frame(lon = lake_trace_coords$gridcell_lon-360, lat = lake_trace_coords$gridcell_lat),
+    aes(x = lon, y = lat), width = 3.75, height = 3.75, fill = NA, color = "black", linewidth = 1
   ) +
   geom_point(aes(x = lake_lon, y = lake_lat)) +
-  geom_path(data = state_map, aes(x = long, y = lat, group = group), color = "black", inherit.aes = FALSE)
+  # geom_path(data = state_map, aes(x = long, y = lat, group = group), color = "black", inherit.aes = FALSE) +
+  geom_path(data = world_map, aes(x = long, y = lat, group = group), color = "black", inherit.aes = FALSE)
 
-########## BURN DATA #########
-
-## Open netCDF file with burn data
-burn_fp = "../data/trace2/TraCE-21K-II.hv.BURN.nc"
-burn_file <- nc_open(burn_fp) # Read in TraCE netCDF file
-
-## Get lon, lat, and time and burn values
-burn_vals <- ncvar_get(burn_file, 'BURN')
-
-nc_close(burn_file) # Close nc file
-
-## Create 3-d array 
-burn_array = array(burn_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
-
-## Create data.table
-grid = expand.grid(lon = trace_lon, lat = trace_lat, time = trace_time) #All combos of these
-burn_vals_flat = as.vector(burn_vals) # Add burn
-burn_dt = data.table(grid, burn = burn_vals_flat) #Create dt
-
-## Filter for specific time step from data.table
-time_step = -22.00
-time_step_ind = which(trace_time == time_step)
-burn_dt_fil = burn_dt[time == time_step]
-burn_dt_fil$time = NULL
-
-## Reformat dataframe at specific time step into matrix for filled.contour
-burn_matrix <- burn_dt_fil |>
-  pivot_wider(names_from = lat, values_from = burn)
-
-burn_matrix <- as.data.frame(burn_matrix)
-rownames(burn_matrix) <- burn_matrix$lon
-burn_matrix$lon = NULL
-
-burn_matrix = as.matrix(burn_matrix)
-
-###### MAKE PLOTS OF burn AT SPECIFIC TIME ######
-
-# Set up mapping parameters ##
-# World2Hires = maps::map("world2Hires",plot=F) ## This is not working
-
-# Make some maps using filled.contour function ##
-# NA lims ## xlim=c(230,295),ylim=c(25,50),
-filled.contour(x=trace_lon, y=trace_lat, z=burn_array[,,time_step_ind], xlim=c(230,295),ylim=c(25,50), color.palette = palette1,
-               levels = seq(0,100,5), xlab="Longitude",ylab="Latitude",
-               main=paste("burn at 22 ka"),
-               plot.axes={
-                 map.axes(las=1); map(stat.proj,lwd=1,add=T,col="black",lty=1)
-               }
-)
-
-# Grid cell plots
-ggplot() +
-  geom_tile(data = burn_dt_fil, aes(x=lon, y=lat, fill=burn)) +
-  scale_fill_gradient2(low = "#075AFF",
-                       mid = "#075AFF",
-                       high = "#FF0000") +
-  scale_x_continuous(limits = c(220, 300)) +
-  scale_y_continuous(limits = c(25, 50)) +
-  labs(x = "Longitude", y = "Latitude", fill = "burn") +
-  theme_minimal()
 
 ###### Create Anomaly Plots ######
 
@@ -176,11 +143,11 @@ t2_ind = which(trace_time == t2)
 
 ## Choose which dataset, comment others out and create anomaly
 
-## cFlux
-anom_matrix = cflux_array[,,t1_ind] - cflux_array[,,t2_ind]
-anom_table = cflux_dt[time == t1]
-anom_table$cflux_t2 = (cflux_dt[time == t2]$cflux)
-anom_table$anomaly = anom_table$cflux_t2 - anom_table$cflux
+## trace_var
+anom_matrix = trace_var_array[,,t1_ind] - trace_var_array[,,t2_ind]
+anom_table = trace_var_dt[time == t1]
+anom_table$trace_var_t2 = (trace_var_dt[time == t2]$trace_var)
+anom_table$anomaly = anom_table$trace_var_t2 - anom_table$trace_var
 
 ## BURN
 # anomaly = burn_array[,,t1] - burn_array[,,t2]
@@ -214,34 +181,36 @@ ggplot() +
   theme_minimal()
 
 
-####### Plot BURN, cflux, and fwi against each other #######
+####### Plot BURN, trace_var, and fwi against each other #######
 
 ## Read in fwi values
-## Open netCDF file with fwi data
-fwi_fp = "../data/TraCE decadal avg. FWI.nc"
-fwi_file <- nc_open(fwi_fp) # Read in TraCE .netCDF file
-
-## Get lon, lat, and time and fwi values
+## Open netCDF file with fwi data and get values
+fwi_fp = "../data/trace2/TraCE II decadal avg. FWI and parameters.nc"
+fwi_file <- nc_open(fwi_fp) 
 fwi_vals <- ncvar_get(fwi_file, 'decavg fwi')
+temp_vals <- ncvar_get(fwi_file, 'decavg surf. temp.')
+prect_vals <- ncvar_get(fwi_file, 'decavg PRECT')
 
 nc_close(fwi_file) # Close nc file
 
 ## Create 3-d array 
 fwi_array = array(fwi_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
+temp_array = array(temp_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
+prect_array = array(prect_vals, dim = c(length(trace_lon), length(trace_lat), length(trace_time)))
 
 lon_ind = 64
 lat_ind = 35
 
 ## Slice for one grid cell to print
 burn_vals_cal = burn_array[lake_lon,lake_lat,] #Get burn values for grid cell in california
-cflux_vals_cal = cflux_array[lake_lon,lake_lat,] #Get cflux values for grid cell in california
+trace_var_vals_cal = trace_var_array[lake_lon,lake_lat,] #Get trace_var values for grid cell in california
 fwi_vals_cal = fwi_array[lake_lon,lake_lat,] #Get fwi values for grid cell in california
 fwi_vals_cal[2204] = 3 # this is not correct
 
 ggplot()+
-  geom_point(aes(x=burn_vals_cal, y = cflux_vals_cal)) +
-  # geom_smooth(aes(x=burn_vals_cal, y = cflux_vals_cal), method = "loess") +
-  labs(title = "BURN vs cFlux for California Grid Cell", x = "BURN", y = "cflux")
+  geom_point(aes(x=burn_vals_cal, y = trace_var_vals_cal)) +
+  # geom_smooth(aes(x=burn_vals_cal, y = trace_var_vals_cal), method = "loess") +
+  labs(title = "BURN vs trace_var for California Grid Cell", x = "BURN", y = "trace_var")
 
 ggplot()+
   geom_point(aes(x=fwi_vals_cal, y = burn_vals_cal)) +
@@ -249,9 +218,9 @@ ggplot()+
   labs(title = "BURN vs FWI for California Grid Cell", x = "FWI", y = "BURN")
 
 ggplot()+
-  geom_point(aes(x=fwi_vals_cal, y = cflux_vals_cal)) +
-  # geom_smooth(aes(x=fwi_vals_cal, y = cflux_vals_cal), method = "loess") +
-  labs(title = "cFlux vs FWI for California Grid Cell", x = "FWI", y = "cFlux")
+  geom_point(aes(x=fwi_vals_cal, y = trace_var_vals_cal)) +
+  # geom_smooth(aes(x=fwi_vals_cal, y = trace_var_vals_cal), method = "loess") +
+  labs(title = "trace_var vs FWI for California Grid Cell", x = "FWI", y = "trace_var")
 
 
 #### ADD VEGETATION DATA ####
@@ -266,9 +235,9 @@ ggplot(data = NULL, aes(x = fwi_vals_cal, y = burn_vals_cal, color = dmi_vals_ca
   scale_color_continuous(low = "lightgreen", high = "darkgreen") +
   labs(title = "BURN vs FWI for California Grid Cell", x = "FWI", y = "BURN", color = "DMI")
 
-ggplot(data = NULL, aes(x = fwi_vals_cal, y = cflux_vals_cal, color = dmi_vals_cal)) +
+ggplot(data = NULL, aes(x = fwi_vals_cal, y = trace_var_vals_cal, color = dmi_vals_cal)) +
   geom_point() +
   scale_color_continuous(low = "lightgreen", high = "darkgreen") +
-  labs(title = "cFlux vs FWI for California Grid Cell", x = "FWI", y = "cFlux", color = "DMI")
+  labs(title = "trace_var vs FWI for California Grid Cell", x = "FWI", y = "trace_var", color = "DMI")
 
 
